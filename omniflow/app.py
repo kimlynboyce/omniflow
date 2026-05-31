@@ -11,6 +11,7 @@ def save_data(f, d):
 
 if 'queue' not in st.session_state: st.session_state.queue = load_data(FILES["queue"], [])
 if 'delete_idx' not in st.session_state: st.session_state.delete_idx = None
+if 'last_ticket' not in st.session_state: st.session_state.last_ticket = None
 
 st.set_page_config(page_title="OMNI-FLOW V7.1", layout="wide")
 st.title("🛡️ OMNI-FLOW: OPERATIONS COMMAND")
@@ -29,8 +30,14 @@ with t1:
                 "status": "WAITING", "joined": timestamp
             })
             save_data(FILES["queue"], st.session_state.queue)
+            # store last ticket and show a prominent confirmation
+            st.session_state.last_ticket = cid
             st.success(f"Ticket {cid} issued at {timestamp}")
+            st.balloons()
 
+    # show the last issued ticket prominently for the user
+    if st.session_state.last_ticket:
+        st.info(f"Your Ticket ID: {st.session_state.last_ticket}")
 with t2:
     for i, cust in enumerate(st.session_state.queue):
         col1, col2 = st.columns([3, 2])
