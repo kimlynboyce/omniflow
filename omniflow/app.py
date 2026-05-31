@@ -46,13 +46,14 @@ with t2:
         
         elif cust['status'] == "SERVING":
             cust_phone = cust.get('phone', '')
+            served_at = cust.get('served_at', 'unknown time')
             if cust_phone:
                 phone_fmt = cust_phone.replace('+', '').replace(' ', '')
-                msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {cust['served_at']}"
+                msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {served_at}"
                 wa_link = f"https://wa.me/{phone_fmt}?text={msg.replace(' ', '%20')}"
                 col2.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
                               f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
-                              f'💬 MSG READY: {cust["served_at"]}</button></a>', unsafe_allow_html=True)
+                              f'💬 MSG READY: {served_at}</button></a>', unsafe_allow_html=True)
             else:
                 col2.info("No phone number available for WhatsApp notification.")
             
