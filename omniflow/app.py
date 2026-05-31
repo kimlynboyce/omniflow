@@ -10,6 +10,7 @@ def save_data(f, d):
     with open(f, 'w') as file: json.dump(d, file, indent=4)
 
 if 'queue' not in st.session_state: st.session_state.queue = load_data(FILES["queue"], [])
+if 'delete_idx' not in st.session_state: st.session_state.delete_idx = None
 
 st.set_page_config(page_title="OMNI-FLOW V7.1", layout="wide")
 st.title("🛡️ OMNI-FLOW: OPERATIONS COMMAND")
@@ -33,13 +34,14 @@ with t1:
 with t2:
     for i, cust in enumerate(st.session_state.queue):
         col1, col2 = st.columns([3, 2])
+        action_col, delete_col = col2.columns([3, 1])
         cust_id = cust.get('id', 'UNKNOWN')
         cust_item = cust.get('item', 'UNKNOWN')
         cust_phone = cust.get('phone', 'N/A')
         col1.write(f"**ID:** {cust_id} | **ITEM:** {cust_item} | **PH:** {cust_phone}")
         
         if cust['status'] == "WAITING":
-            if col2.button("SERVE", key=f"s_{i}"):
+            if action_col.button("SERVE", key=f"s_{i}"):
                 cust['status'] = "SERVING"
                 cust['served_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 save_data(FILES["queue"], st.session_state.queue); st.rerun()
@@ -51,13 +53,13 @@ with t2:
                 phone_fmt = cust_phone.replace('+', '').replace(' ', '')
                 msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {served_at}"
                 wa_link = f"https://wa.me/{phone_fmt}?text={msg.replace(' ', '%20')}"
-                col2.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+                action_col.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
                               f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
                               f'💬 MSG READY: {served_at}</button></a>', unsafe_allow_html=True)
             else:
-                col2.info("No phone number available for WhatsApp notification.")
+                action_col.info("No phone number available for WhatsApp notification.")
             
-            if col2.button("FINISH", key=f"f_{i}"):
+            if action_col.button("FINISH", key=f"f_{i}"):
                 cust['status'] = "SURVEY"
                 save_data(FILES["queue"], st.session_state.queue); st.rerun()
         
@@ -71,4 +73,18 @@ with t2:
                     save_data(FILES["survey"], log)
                     st.session_state.queue.pop(i)
                     save_data(FILES["queue"], st.session_state.queue); st.rerun()
+        
+        if delete_col.button("DELETE", key=f"d_{i}"):
+            st.session_state.delete_idx = i
+
+        if st.session_state.delete_idx == i:
+            password = delete_col.text_input("Admin Password", type="password", key=f"pwd_{i}")
+            if delete_col.button("CONFIRM DELETE", key=f"confirm_d_{i}"):
+                if password == "admin":
+                    st.session_state.queue.pop(i)
+                    save_data(FILES["queue"], st.session_state.queue)
+                    st.session_state.delete_idx = None
+                    st.experimental_rerun()
+                else:
+                    st.error("Incorrect password. Delete canceled.")
 
