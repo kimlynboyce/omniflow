@@ -35,7 +35,12 @@ SURVEY_BASE_URL = os.environ.get("SURVEY_BASE_URL", "").rstrip("/")
 if not SURVEY_BASE_URL:
     SURVEY_BASE_URL = "https://your-streamlit-app-url"  # replace with your deployed app URL
 
-survey_query = st.experimental_get_query_params().get("survey", [None])[0]
+survey_query = None
+if hasattr(st, "experimental_get_query_params"):
+    try:
+        survey_query = st.experimental_get_query_params().get("survey", [None])[0]
+    except Exception:
+        survey_query = None
 if survey_query:
     st.set_page_config(page_title="OMNI-FLOW Survey", layout="wide")
     st.title("📝 Customer Survey")
