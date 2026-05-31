@@ -1,20 +1,37 @@
 import streamlit as st
-import uuid, json, os
+import uuid, json, os, re
 from datetime import datetime
+from urllib.parse import quote_plus
 
 # --- SYSTEM CONFIG ---
 FILES = {"queue": "queue_data.json", "survey": "survey_log.json"}
 
-def load_data(f, d): return json.load(open(f, 'r')) if os.path.exists(f) else d
-def save_data(f, d): 
-    with open(f, 'w') as file: json.dump(d, file, indent=4)
+def load_data(f, d):
+    try:
+        if os.path.exists(f):
+            with open(f, 'r', encoding='utf-8') as fh:
+                return json.load(fh)
+    except Exception:
+        return d
+    return d
+
+def save_data(f, d):
+    tmp = f + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(d, fh, indent=4, ensure_ascii=False)
+    try:
+        os.replace(tmp, f)
+    except Exception:
+        # best-effort fallback
+        os.remove(tmp)
 
 if 'queue' not in st.session_state: st.session_state.queue = load_data(FILES["queue"], [])
 if 'delete_idx' not in st.session_state: st.session_state.delete_idx = None
 if 'last_ticket' not in st.session_state: st.session_state.last_ticket = None
+if 'edit_idx' not in st.session_state: st.session_state.edit_idx = None
 
 st.set_page_config(page_title="OMNI-FLOW V7.1", layout="wide")
-st.title(" PEPRO QTRAC")
+st.title("🛡️ OMNI-FLOW: OPERATIONS COMMAND")
 
 t1, t2, t3 = st.tabs(["➕ ENTRY", "⚙️ STAFF DASH", "📊 ANALYTICS"])
 
@@ -23,17 +40,22 @@ with t1:
         phone = st.text_input("CUSTOMER PHONE")
         item = st.text_input("ITEM NAME (e.g., Garlic Powder)")
         if st.form_submit_button("JOIN QUEUE"):
-            cid = str(uuid.uuid4())[:6]
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state.queue.append({
-                "id": cid, "phone": phone, "item": item, 
-                "status": "WAITING", "joined": timestamp
-            })
-            save_data(FILES["queue"], st.session_state.queue)
-            # store last ticket and show a prominent confirmation
-            st.session_state.last_ticket = cid
-            st.success(f"Ticket {cid} issued at {timestamp}")
-            st.balloons()
+            # validate required fields
+            if not phone or not phone.strip() or not item or not item.strip():
+                st.error("Both phone and item are required to join the queue.")
+            else:
+                cid = str(uuid.uuid4())[:6]
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                phone_norm = re.sub(r'\s+', '', phone)
+                st.session_state.queue.append({
+                    "id": cid, "phone": phone_norm, "item": item.strip(),
+                    "status": "WAITING", "joined": timestamp
+                })
+                save_data(FILES["queue"], st.session_state.queue)
+                # store last ticket and show a prominent confirmation
+                st.session_state.last_ticket = cid
+                st.success(f"Ticket {cid} issued at {timestamp}")
+                st.balloons()
 
     # show the last issued ticket prominently for the user
     if st.session_state.last_ticket:
@@ -57,12 +79,14 @@ with t2:
             cust_phone = cust.get('phone', '')
             served_at = cust.get('served_at', 'unknown time')
             if cust_phone:
-                phone_fmt = cust_phone.replace('+', '').replace(' ', '')
+                phone_fmt = re.sub(r"\D", "", cust_phone)
                 msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {served_at}"
-                wa_link = f"https://wa.me/{phone_fmt}?text={msg.replace(' ', '%20')}"
-                action_col.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
-                              f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
-                              f'💬 MSG READY: {served_at}</button></a>', unsafe_allow_html=True)
+                wa_link = f"https://wa.me/{phone_fmt}?text={quote_plus(msg)}"
+                action_col.markdown(
+                    f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+                    f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
+                    f'💬 MSG READY: {served_at}</button></a>',
+                    unsafe_allow_html=True)
             else:
                 action_col.info("No phone number available for WhatsApp notification.")
             
@@ -76,18 +100,49 @@ with t2:
                 root = st.selectbox("Failure Point", ["Wait Time", "Staff Attitude", "Quality", "Process"]) if score != "Excellent" else None
                 if st.form_submit_button("SUBMIT"):
                     log = load_data(FILES["survey"], [])
-                    log.append({"id": cust['id'], "item": cust['item'], "score": score, "root": root})
+                    log.append({
+                        "id": cust.get('id', 'UNKNOWN'),
+                        "item": cust.get('item', 'UNKNOWN'),
+                        "score": score,
+                        "root": root
+                    })
                     save_data(FILES["survey"], log)
                     st.session_state.queue.pop(i)
                     save_data(FILES["queue"], st.session_state.queue); st.rerun()
         
+        # Edit / Delete controls
+        if delete_col.button("EDIT", key=f"e_{i}"):
+            st.session_state.edit_idx = i
+            st.session_state.edit_phone = cust.get('phone', '')
+            st.session_state.edit_item = cust.get('item', '')
+
+        if st.session_state.edit_idx == i:
+            new_phone = delete_col.text_input("Phone", value=st.session_state.get('edit_phone', ''), key=f"edit_phone_{i}")
+            new_item = delete_col.text_input("Item", value=st.session_state.get('edit_item', ''), key=f"edit_item_{i}")
+            if delete_col.button("SAVE", key=f"save_{i}"):
+                st.session_state.queue[i]['phone'] = re.sub(r'\s+', '', new_phone)
+                st.session_state.queue[i]['item'] = new_item.strip()
+                save_data(FILES["queue"], st.session_state.queue)
+                st.session_state.edit_idx = None
+                st.experimental_rerun()
+            if delete_col.button("CANCEL", key=f"cancel_{i}"):
+                st.session_state.edit_idx = None
+
         if delete_col.button("DELETE", key=f"d_{i}"):
             st.session_state.delete_idx = i
+
+        # password-protected delete
+        try:
+            admin_password = os.environ.get("OMNI_ADMIN_PWD") or (st.secrets.get("admin_password") if hasattr(st, 'secrets') else None)
+        except Exception:
+            admin_password = os.environ.get("OMNI_ADMIN_PWD")
+        if not admin_password:
+            admin_password = "admin"
 
         if st.session_state.delete_idx == i:
             password = delete_col.text_input("Admin Password", type="password", key=f"pwd_{i}")
             if delete_col.button("CONFIRM DELETE", key=f"confirm_d_{i}"):
-                if password == "admin":
+                if password == admin_password:
                     st.session_state.queue.pop(i)
                     save_data(FILES["queue"], st.session_state.queue)
                     st.session_state.delete_idx = None
