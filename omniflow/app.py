@@ -14,7 +14,7 @@ if 'delete_idx' not in st.session_state: st.session_state.delete_idx = None
 if 'last_ticket' not in st.session_state: st.session_state.last_ticket = None
 
 st.set_page_config(page_title="OMNI-FLOW V7.1", layout="wide")
-st.title("🛡️ OMNI-FLOW: OPERATIONS COMMAND")
+st.title(" PEPRO QTRAC")
 
 t1, t2, t3 = st.tabs(["➕ ENTRY", "⚙️ STAFF DASH", "📊 ANALYTICS"])
 
