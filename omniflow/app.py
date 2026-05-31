@@ -33,7 +33,10 @@ with t1:
 with t2:
     for i, cust in enumerate(st.session_state.queue):
         col1, col2 = st.columns([3, 2])
-        col1.write(f"**ID:** {cust['id']} | **ITEM:** {cust['item']} | **PH:** {cust['phone']}")
+        cust_id = cust.get('id', 'UNKNOWN')
+        cust_item = cust.get('item', 'UNKNOWN')
+        cust_phone = cust.get('phone', 'N/A')
+        col1.write(f"**ID:** {cust_id} | **ITEM:** {cust_item} | **PH:** {cust_phone}")
         
         if cust['status'] == "WAITING":
             if col2.button("SERVE", key=f"s_{i}"):
@@ -42,13 +45,16 @@ with t2:
                 save_data(FILES["queue"], st.session_state.queue); st.rerun()
         
         elif cust['status'] == "SERVING":
-            phone_fmt = cust['phone'].replace('+', '').replace(' ', '')
-            msg = f"Your order of {cust['item']} (ID: {cust['id']}) is ready! Served at: {cust['served_at']}"
-            wa_link = f"https://wa.me/{phone_fmt}?text={msg.replace(' ', '%20')}"
-            
-            col2.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
-                          f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
-                          f'💬 MSG READY: {cust["served_at"]}</button></a>', unsafe_allow_html=True)
+            cust_phone = cust.get('phone', '')
+            if cust_phone:
+                phone_fmt = cust_phone.replace('+', '').replace(' ', '')
+                msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {cust['served_at']}"
+                wa_link = f"https://wa.me/{phone_fmt}?text={msg.replace(' ', '%20')}"
+                col2.markdown(f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
+                              f'<button style="background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px;">'
+                              f'💬 MSG READY: {cust["served_at"]}</button></a>', unsafe_allow_html=True)
+            else:
+                col2.info("No phone number available for WhatsApp notification.")
             
             if col2.button("FINISH", key=f"f_{i}"):
                 cust['status'] = "SURVEY"
