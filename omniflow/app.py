@@ -29,6 +29,40 @@ if 'queue' not in st.session_state: st.session_state.queue = load_data(FILES["qu
 if 'delete_idx' not in st.session_state: st.session_state.delete_idx = None
 if 'last_ticket' not in st.session_state: st.session_state.last_ticket = None
 if 'edit_idx' not in st.session_state: st.session_state.edit_idx = None
+if 'last_entry_notice' not in st.session_state: st.session_state.last_entry_notice = None
+
+SURVEY_BASE_URL = os.environ.get("SURVEY_BASE_URL", "").rstrip("/")
+if not SURVEY_BASE_URL:
+    SURVEY_BASE_URL = "https://your-streamlit-app-url"  # replace with your deployed app URL
+
+survey_query = st.experimental_get_query_params().get("survey", [None])[0]
+if survey_query:
+    st.set_page_config(page_title="OMNI-FLOW Survey", layout="wide")
+    st.title("📝 Customer Survey")
+    cust = next((c for c in st.session_state.queue if c.get('id') == survey_query), None)
+    if not cust:
+        st.error("Survey link is invalid or the ticket has already been completed.")
+    else:
+        st.write(f"**Ticket:** {cust.get('id', 'UNKNOWN')}  ")
+        st.write(f"**Item:** {cust.get('item', 'UNKNOWN')}  ")
+        with st.form("survey_link_form"):
+            score = st.select_slider("Rating", ["Poor", "Neutral", "Good", "Excellent"])
+            root = st.selectbox("Failure Point", ["Wait Time", "Staff Attitude", "Quality", "Process"]) if score != "Excellent" else None
+            if st.form_submit_button("SUBMIT SURVEY"):
+                log = load_data(FILES["survey"], [])
+                log.append({
+                    "id": cust.get('id', 'UNKNOWN'),
+                    "item": cust.get('item', 'UNKNOWN'),
+                    "score": score,
+                    "root": root
+                })
+                save_data(FILES["survey"], log)
+                st.session_state.queue = [q for q in st.session_state.queue if q.get('id') != survey_query]
+                save_data(FILES["queue"], st.session_state.queue)
+                st.success("Thank you for your feedback!")
+                st.experimental_set_query_params()
+                st.stop()
+    st.stop()
 
 st.set_page_config(page_title="OMNI-FLOW V7.1", layout="wide")
 st.title("🛡️ OMNI-FLOW: OPERATIONS COMMAND")
@@ -54,12 +88,22 @@ with t1:
                 save_data(FILES["queue"], st.session_state.queue)
                 # store last ticket and show a prominent confirmation
                 st.session_state.last_ticket = cid
+                survey_link = f"{SURVEY_BASE_URL}/?survey={cid}"
+                notif_msg = (
+                    f"Ticket {cid} issued at {timestamp}. "
+                    f"When the order is served, the WhatsApp notification will be sent with this message:\n"
+                    f"Your order of {item.strip()} (ID: {cid}) is ready! Served at: <served_time>. "
+                    f"Please provide feedback: {survey_link}"
+                )
+                st.session_state.last_entry_notice = notif_msg
                 st.success(f"Ticket {cid} issued at {timestamp}")
                 st.balloons()
 
     # show the last issued ticket prominently for the user
     if st.session_state.last_ticket:
         st.info(f"Your Ticket ID: {st.session_state.last_ticket}")
+    if st.session_state.last_entry_notice:
+        st.warning(st.session_state.last_entry_notice)
 with t2:
     for i, cust in enumerate(st.session_state.queue):
         col1, col2 = st.columns([3, 2])
@@ -80,7 +124,11 @@ with t2:
             served_at = cust.get('served_at', 'unknown time')
             if cust_phone:
                 phone_fmt = re.sub(r"\D", "", cust_phone)
-                msg = f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {served_at}"
+                survey_link = f"{SURVEY_BASE_URL}/?survey={cust_id}"
+                msg = (
+                    f"Your order of {cust_item} (ID: {cust_id}) is ready! Served at: {served_at}. "
+                    f"Please provide feedback: {survey_link}"
+                )
                 wa_link = f"https://wa.me/{phone_fmt}?text={quote_plus(msg)}"
                 action_col.markdown(
                     f'<a href="{wa_link}" target="_blank" style="text-decoration:none;">'
